@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+alembic
+python-dotenv
+pydantic
+redis
+transformers
+torch         # choose CPU or correct CUDA wheel manually if needed
+sentence-transformers
+faiss-cpu
+whisper       # or whisperx if preferred
+librosa
+gTTS
+onnxruntime   # optional for ONNX optimization
+python-multipart
