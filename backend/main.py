@@ -5,6 +5,12 @@ import os
 from app.ai_models.translator import SmartTranslator
 from app.ai_models.pronunciation_checker import PronunciationChecker
 from app.ai_models.conversation_bot import FrenchConversationBot
+from fastapi import Depends
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.cache import get_vocab_cached, invalidate_vocab_cache
+from app import models
+from app.schemas import VocabularyCreate
 
 # ------------------- FastAPI Setup -----------------------------------
 app = FastAPI(title="AI Language Learning API")
@@ -84,6 +90,71 @@ async def conversation(request: ConversationRequest):
         response = conversation_bot.generate_response(request.message, request.scenario)
         return {"user_message": request.message, "bot_response": response, "scenario": request.scenario}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/vocab/{word_id}")
+async def get_vocab(word_id: int, db: Session = Depends(get_db)):
+    try:
+        data = get_vocab_cached(db, word_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Vocabulary not found")
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/vocab")
+async def list_vocab(limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    try:
+        items = (
+            db.query(models.Vocabulary)
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return [
+            {
+                "id": v.id,
+                "english_word": v.english_word,
+                "tamil_word": getattr(v, "tamil_word", None),
+                "french_word": v.french_word,
+                "pronunciation": getattr(v, "pronunciation", None),
+                "category": getattr(v, "category", None),
+            }
+            for v in items
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/vocab", status_code=201)
+async def create_vocab(payload: VocabularyCreate, db: Session = Depends(get_db)):
+    try:
+        v = models.Vocabulary(
+            english_word=payload.english_word,
+            tamil_word=getattr(payload, "tamil_word", None),
+            french_word=payload.french_word,
+            pronunciation=getattr(payload, "pronunciation", None),
+            category=getattr(payload, "category", None),
+        )
+        db.add(v)
+        db.commit()
+        db.refresh(v)
+        # ensure cache for this id is clear (if any)
+        try:
+            invalidate_vocab_cache(v.id)
+        except Exception:
+            pass
+        return {
+            "id": v.id,
+            "english_word": v.english_word,
+            "tamil_word": getattr(v, "tamil_word", None),
+            "french_word": v.french_word,
+            "pronunciation": getattr(v, "pronunciation", None),
+            "category": getattr(v, "category", None),
+        }
+    except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")

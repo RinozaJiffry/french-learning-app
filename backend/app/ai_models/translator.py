@@ -80,6 +80,11 @@ class SmartTranslator:
         else:
             return self._translate_with(self.en_fr_tokenizer, self.en_fr_model, texts)
 
+    # Convenience wrapper for quick tests
+    def translate_english_to_french(self, text: str) -> str:
+        """Translate English to French (helper used by quick-start command)."""
+        return self.translate(text, source_language="en")
+
     def translate_with_confidence(
         self,
         texts: List[str],
